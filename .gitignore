@@ -1,0 +1,6 @@
+notifier_config.json
+data/
+__pycache__/
+.venv/
+backtest_trades.json
+*.pyc
