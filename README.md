@@ -85,11 +85,21 @@ File `notifier_config.json` disimpan di direktori root project:
 > **Catatan Keamanan:**
 > File `notifier_config.json` memuat kredensial rahasia bot Telegram. File ini dimasukkan ke `.gitignore` agar tidak ter-commit ke version control. Jangan pernah membagikan atau mem-print isi token ke log publik.
 
-### Rekomendasi Cron
-Candle 4H Binance close pada pukul 00, 04, 08, 12, 16, 20 UTC. Disarankan mengeksekusi scanner pada menit ke-1 setelah candle close:
-```cron
-1 0,4,8,12,16,20 * * * cd /path/to/futur && .venv/Scripts/python scanner.py --notify
-```
+### Rekomendasi Cron / Otomasi (100% Gratis Tanpa Laptop Nyala)
+
+Project ini dilengkapi dengan **GitHub Actions** (`.github/workflows/scanner.yml`) yang berjalan otomatis setiap 4 jam di cloud GitHub/Microsoft:
+- Jadwal: Menit ke-5 setelah candle 4H close (`00:05`, `04:05`, `08:05`, `12:05`, `16:05`, `20:05` UTC / `07:05`, `11:05`, `15:05`, `19:05`, `23:05`, `03:05` WIB).
+- Menggunakan `actions/cache` untuk menyimpan cache data klines & RF probability sehingga eksekusi sangat cepat (<20 detik).
+
+**Cara Mengaktifkan di GitHub:**
+1. Buka repository kamu di GitHub (`kullal/futures`).
+2. Masuk ke **Settings** > **Secrets and variables** > **Actions**.
+3. Buat dua **Repository Secrets**:
+   - `TELEGRAM_BOT_TOKEN`: Token bot Telegram kamu (contoh: `8663980044:...`)
+   - `TELEGRAM_CHAT_ID`: ID chat Telegram kamu (contoh: `1075969063`)
+4. Masuk ke tab **Actions** di GitHub, pilih **BTC Futures 4H Scanner**, lalu klik **Run workflow** untuk uji coba manual pertama kali.
+
+Jika ingin menjalankan lokal di Windows tanpa GitHub, gunakan Windows Task Scheduler (`cron_scan.py`).
 
 ## Roadmap
 

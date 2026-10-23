@@ -1,5 +1,6 @@
 """Telegram notifier for BTC futures signal system."""
 import json
+import os
 import sys
 from pathlib import Path
 import requests
@@ -8,9 +9,14 @@ CONFIG_PATH = Path(__file__).resolve().parent / "notifier_config.json"
 
 
 def get_config() -> dict | None:
-    """Load Telegram configuration from notifier_config.json."""
+    """Load Telegram configuration from env vars or notifier_config.json."""
+    env_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    env_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if env_token and env_chat_id:
+        return {"bot_token": env_token, "chat_id": env_chat_id}
+
     if not CONFIG_PATH.exists():
-        sys.stderr.write(f"Warning: {CONFIG_PATH.name} tidak ditemukan. Pengiriman notifikasi dilewati.\n")
+        sys.stderr.write(f"Warning: {CONFIG_PATH.name} tidak ditemukan dan env vars kosong. Notifikasi dilewati.\n")
         return None
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
