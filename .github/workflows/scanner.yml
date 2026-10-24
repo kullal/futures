@@ -1,12 +1,7 @@
 name: BTC Futures 4H Scanner
 
 on:
-  schedule:
-    # Runs at minute 5 after every 4H candle close in UTC:
-    # 00:05, 04:05, 08:05, 12:05, 16:05, 20:05 UTC
-    # (Di WIB: 07:05, 11:05, 15:05, 19:05, 23:05, 03:05 WIB)
-    - cron: '5 0,4,8,12,16,20 * * *'
-  workflow_dispatch: # Memungkinkan jalankan manual kapan saja dari web GitHub
+  workflow_dispatch: # Dipicu via API oleh cron-job.org atau manual dari web GitHub
 
 jobs:
   scan:
