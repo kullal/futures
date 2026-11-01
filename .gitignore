@@ -1,6 +1,7 @@
 notifier_config.json
 testnet_config.json
-data/
+data/*
+!data/top50_momentum_symbols.json
 __pycache__/
 .venv/
 backtest_trades.json

@@ -143,6 +143,55 @@ class BinanceTestnet:
             "margin_type": pos.get("marginType", "cross"),
         }
 
+    def get_all_open_positions(self) -> list[dict]:
+        """Return list of all non-flat open positions."""
+        positions = self._request("GET", "/fapi/v2/positionRisk", signed=True)
+        if not positions or not isinstance(positions, list):
+            return []
+        active = []
+        for pos in positions:
+            amt = float(pos.get("positionAmt", 0.0))
+            if abs(amt) > 0:
+                active.append({
+                    "symbol": pos.get("symbol"),
+                    "side": "LONG" if amt > 0 else "SHORT",
+                    "size": abs(amt),
+                    "entry_price": float(pos.get("entryPrice", 0.0)),
+                    "pnl": float(pos.get("unRealizedProfit", 0.0)),
+                })
+        return active
+
+    def get_symbol_rules(self, symbol: str) -> dict:
+        """Fetch and cache lot precision and step size for symbol."""
+        if not hasattr(self, "_rules_cache"):
+            self._rules_cache = {}
+        if symbol in self._rules_cache:
+            return self._rules_cache[symbol]
+        try:
+            info = self._request("GET", "/fapi/v1/exchangeInfo")
+            for s in info.get("symbols", []):
+                sym = s["symbol"]
+                q_prec = int(s.get("quantityPrecision", 2))
+                p_prec = int(s.get("pricePrecision", 2))
+                step = 10 ** (-q_prec) if q_prec > 0 else 1.0
+                tick = 10 ** (-p_prec) if p_prec > 0 else 0.01
+                for f in s.get("filters", []):
+                    if f.get("filterType") == "LOT_SIZE":
+                        step = float(f.get("stepSize", step))
+                    elif f.get("filterType") == "PRICE_FILTER":
+                        tick = float(f.get("tickSize", tick))
+                self._rules_cache[sym] = {
+                    "quantityPrecision": q_prec,
+                    "pricePrecision": p_prec,
+                    "stepSize": step,
+                    "tickSize": tick,
+                }
+            if symbol in self._rules_cache:
+                return self._rules_cache[symbol]
+        except Exception:
+            pass
+        return {"quantityPrecision": 2, "pricePrecision": 2, "stepSize": 0.01, "tickSize": 0.01}
+
     def setup_symbol(self, symbol: str = "BTCUSDT", leverage: int = 3):
         """Set leverage cap and isolated margin."""
         # Set leverage
@@ -253,9 +302,10 @@ def calculate_position_size(
     balance: float,
     entry: float,
     sl: float,
-    risk_pct: float = 0.02,
+    risk_pct: float = 0.01,
     leverage: float = 3.0,
     step_size: float = 0.001,
+    precision: int = 3,
 ) -> float:
     """Calculate position size adhering to risk budget and leverage cap."""
     if balance <= 0 or entry <= 0 or entry == sl:
@@ -269,9 +319,11 @@ def calculate_position_size(
     max_size = (balance * leverage) / entry
     size = min(raw_size, max_size)
 
-    # Quantize to step size (e.g. 0.001 for BTC)
+    # Quantize to step size
     steps = math.floor(size / step_size)
-    quantized_size = round(steps * step_size, 3)
+    quantized_size = round(steps * step_size, precision)
+    if precision == 0:
+        quantized_size = float(int(quantized_size))
 
     # Minimum notional check (Binance min notional is $5)
     if quantized_size * entry < 5.0:
@@ -297,54 +349,66 @@ def log_trade(record: dict):
 def execute_signal(sig: dict, dry_run: bool = False) -> dict:
     """Execute strategy signal on Binance Testnet."""
     cfg = load_config()
-    symbol = cfg.get("symbol", "BTCUSDT")
+    symbol = sig.get("symbol", cfg.get("symbol", "BTCUSDT"))
     leverage = cfg.get("leverage", 3)
-    risk_pct = cfg.get("risk_pct", 0.02)
+    risk_pct = cfg.get("risk_pct", 0.01)
 
     side = sig["side"].upper()  # LONG or SHORT
     entry_est = float(sig["entry"])
     sl = float(sig["sl"])
     tp = float(sig["tp"])
 
+    client = BinanceTestnet(cfg.get("api_key", ""), cfg.get("api_secret", ""))
+    rules = client.get_symbol_rules(symbol)
+    step_size = rules["stepSize"]
+    q_prec = rules["quantityPrecision"]
+    p_prec = rules["pricePrecision"]
+
+    sl_rounded = round(sl, p_prec)
+    tp_rounded = round(tp, p_prec)
+
     if dry_run or not cfg.get("api_key") or not cfg.get("api_secret"):
-        # Dry-run calculation
         sim_balance = 10_000.0
-        size = calculate_position_size(sim_balance, entry_est, sl, risk_pct=risk_pct, leverage=leverage)
-        result = {
+        size = calculate_position_size(
+            sim_balance, entry_est, sl,
+            risk_pct=risk_pct, leverage=leverage,
+            step_size=step_size, precision=q_prec
+        )
+        return {
             "mode": "DRY_RUN (Simulasi)",
             "symbol": symbol,
             "side": side,
             "sim_balance": sim_balance,
             "entry_est": entry_est,
-            "sl": sl,
-            "tp": tp,
+            "sl": sl_rounded,
+            "tp": tp_rounded,
             "calculated_size": size,
             "notional_usdt": round(size * entry_est, 2),
             "risk_budget_usdt": round(sim_balance * risk_pct, 2),
             "status": "VALID" if size > 0 else "SIZE_TOO_SMALL",
         }
-        return result
-
-    client = BinanceTestnet(cfg["api_key"], cfg["api_secret"])
 
     # 1. Setup leverage & margin mode
     client.setup_symbol(symbol=symbol, leverage=leverage)
 
-    # 2. Check existing position
+    # 2. Check existing position for this symbol
     pos = client.get_position(symbol)
     if pos["side"] == side:
         return {
             "status": "SKIPPED_EXISTING_POSITION",
-            "message": f"Sudah memiliki posisi {side} aktif ({pos['size']} BTC). Mencegah double entry.",
+            "message": f"Sudah memiliki posisi {side} aktif di {symbol} ({pos['size']}). Mencegah double entry.",
         }
 
     if pos["side"] != "FLAT":
-        # Reversal: close opposite position first
         client.close_position(symbol)
 
     # 3. Calculate size from actual testnet balance
     balance = client.get_balance()
-    size = calculate_position_size(balance, entry_est, sl, risk_pct=risk_pct, leverage=leverage)
+    size = calculate_position_size(
+        balance, entry_est, sl,
+        risk_pct=risk_pct, leverage=leverage,
+        step_size=step_size, precision=q_prec
+    )
     if size <= 0:
         return {
             "status": "ABORTED",
@@ -361,8 +425,8 @@ def execute_signal(sig: dict, dry_run: bool = False) -> dict:
     entry_order = client.place_market_order(symbol, order_side, size)
 
     # 6. Place SL & TP conditional orders immediately via Algo Service
-    sl_order = client.place_stop_loss(symbol, exit_side, sl, size)
-    tp_order = client.place_take_profit(symbol, exit_side, tp, size)
+    sl_order = client.place_stop_loss(symbol, exit_side, sl_rounded, size)
+    tp_order = client.place_take_profit(symbol, exit_side, tp_rounded, size)
 
     record = {
         "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
@@ -370,11 +434,11 @@ def execute_signal(sig: dict, dry_run: bool = False) -> dict:
         "side": side,
         "size": size,
         "entry_est": entry_est,
-        "sl": sl,
-        "tp": tp,
+        "sl": sl_rounded,
+        "tp": tp_rounded,
         "entry_order_id": entry_order.get("orderId"),
-        "sl_order_id": sl_order.get("orderId"),
-        "tp_order_id": tp_order.get("orderId"),
+        "sl_order_id": sl_order.get("algoId"),
+        "tp_order_id": tp_order.get("algoId"),
     }
     log_trade(record)
 
