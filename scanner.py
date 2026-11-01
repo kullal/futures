@@ -89,13 +89,26 @@ def scan(threshold: float = 0.5) -> dict | None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Live 4H signal scanner BTCUSDT")
     parser.add_argument("--notify", action="store_true", help="Kirim notifikasi Telegram jika ada signal/penolakan")
+    parser.add_argument("--execute-testnet", action="store_true", help="Eksekusi sinyal ke Binance Testnet jika ada signal")
     args = parser.parse_args()
 
     sig = scan()
     if sig:
         print(sig)
+        exec_res = None
+        if args.execute_testnet:
+            try:
+                from executor_testnet import execute_signal
+                exec_res = execute_signal(sig)
+                print(f"[Testnet Execution]: {exec_res}")
+            except Exception as e:
+                print(f"[Testnet Execution Error]: {e}")
+
         if args.notify:
-            send_telegram(format_alert(sig))
+            alert_msg = format_alert(sig)
+            if exec_res:
+                alert_msg += f"\n\n🤖 <b>Testnet Execution:</b> {exec_res.get('status', 'N/A')}"
+            send_telegram(alert_msg)
     elif _last_rejection:
         if args.notify and _rejection_data:
             send_telegram(

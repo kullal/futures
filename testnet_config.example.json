@@ -1,0 +1,7 @@
+{
+  "api_key": "YOUR_BINANCE_TESTNET_API_KEY",
+  "api_secret": "YOUR_BINANCE_TESTNET_API_SECRET",
+  "symbol": "BTCUSDT",
+  "leverage": 3,
+  "risk_pct": 0.02
+}

@@ -30,16 +30,17 @@ def run_comparison(
     df_aug = attach_rf_prob(df_aug, n_bars=rf_n)
 
     variants = [
-        ("Baseline (ATR only)", False, False, False),
-        ("+Onchain filter", True, False, False),
-        ("+GARCH filter", False, True, False),
-        ("+Onchain +GARCH", True, True, False),
-        ("+RF filter", False, False, True),
-        ("+Onchain +RF", True, False, True),
+        ("Baseline (ATR only)", False, False, False, False),
+        ("+Onchain filter", True, False, False, False),
+        ("+GARCH filter", False, True, False, False),
+        ("+Onchain +GARCH", True, True, False, False),
+        ("+RF filter", False, False, True, False),
+        ("+Onchain +RF", True, False, True, False),
+        ("+RF +VolMed(10)", False, False, True, True),
     ]
 
     results = []
-    for name, use_oc, use_garch, use_rf in variants:
+    for name, use_oc, use_garch, use_rf, use_vol in variants:
         df_sig = signals(
             df_aug,
             atr_pct_cap=6.0,
@@ -50,6 +51,8 @@ def run_comparison(
             use_rf=use_rf,
             rf_thresh=rf_thresh,
             rf_n=rf_n,
+            use_vol=use_vol,
+            vol_n=10,
         )
         trades, eq = backtest(df_sig)
         m = metrics(trades, eq)

@@ -39,6 +39,8 @@ def signals(
     use_rf: bool = True,
     rf_thresh: float = 0.5,
     rf_n: int = 3,
+    use_vol: bool = False,
+    vol_n: int = 10,
 ) -> pd.DataFrame:
     """Return df with columns: sig (+1 long, -1 short, 0 none) on cross bars, atr_pct, filtered flag."""
     df = df.copy()
@@ -93,6 +95,11 @@ def signals(
         bad_short_rf = has_rf & (df["sig"] == -1) & (df["rf_prob_long"] > (1.0 - rf_thresh))
         df.loc[bad_long_rf, "sig"] = 0
         df.loc[bad_short_rf, "sig"] = 0
+
+    # 5. Volume confirmation filter: require signal bar volume > rolling median
+    if use_vol:
+        vol_med = df["volume"].rolling(vol_n).median()
+        df.loc[df["volume"] <= vol_med, "sig"] = 0
 
     return df
 

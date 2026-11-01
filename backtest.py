@@ -102,6 +102,8 @@ def run(
     use_rf: bool = True,
     rf_thresh: float = 0.5,
     rf_n: int = 3,
+    use_vol: bool = False,
+    vol_n: int = 10,
     df: pd.DataFrame | None = None,
 ):
     if df is None:
@@ -118,6 +120,8 @@ def run(
         use_rf=use_rf,
         rf_thresh=rf_thresh,
         rf_n=rf_n,
+        use_vol=use_vol,
+        vol_n=vol_n,
     )
     trades, eq = backtest(df)
     return trades, eq, df
@@ -135,12 +139,15 @@ if __name__ == "__main__":
     parser.add_argument("--no-rf", dest="rf", action="store_false", help="Disable Random Forest confidence filter")
     parser.add_argument("--rf-thresh", type=float, default=0.5, help="RF probability threshold")
     parser.add_argument("--rf-n", type=int, default=3, help="RF forward return prediction horizon (bars)")
+    parser.add_argument("--vol", dest="vol", action="store_true", default=False, help="Enable volume confirmation filter (rolling median)")
+    parser.add_argument("--vol-n", type=int, default=10, help="Volume median rolling window (bars)")
     parser.add_argument("--both", action="store_true", help="Enable both on-chain and GARCH filters")
     args = parser.parse_args()
 
     use_onchain = args.onchain or args.both
     use_garch = args.garch or args.both
     use_rf = args.rf
+    use_vol = args.vol
 
     trades, eq, df = run(
         use_onchain=use_onchain,
@@ -150,6 +157,8 @@ if __name__ == "__main__":
         use_rf=use_rf,
         rf_thresh=args.rf_thresh,
         rf_n=args.rf_n,
+        use_vol=use_vol,
+        vol_n=args.vol_n,
     )
     m = metrics(trades, eq)
     labels = []
@@ -159,6 +168,8 @@ if __name__ == "__main__":
         labels.append("GARCH")
     if use_rf:
         labels.append("RF")
+    if use_vol:
+        labels.append(f"VolMed({args.vol_n})")
     label = "Baseline" + (" + " + " + ".join(labels) if labels else "")
 
     print(f"[{label}] Period: {df['dt'].iloc[0].date()} -> {df['dt'].iloc[-1].date()} ({len(df)} bars)")
