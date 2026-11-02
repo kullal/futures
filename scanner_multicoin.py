@@ -141,9 +141,19 @@ def format_multicoin_alert(sig: dict, exec_res: dict | None = None) -> str:
     exec_line = ""
     if exec_res:
         st = exec_res.get("status", "N/A")
-        det = exec_res.get("details", {})
-        size = det.get("size", "")
-        exec_line = f"\n🤖 <b>Testnet Execution:</b> {st} ({size} {sig['symbol']})\n"
+        if st == "EXECUTED":
+            det = exec_res.get("details", {})
+            size = det.get("size", "")
+            exec_line = f"\n🤖 <b>Testnet Execution:</b> EXECUTED ({size} {sig['symbol']})\n"
+        elif st == "FAILED":
+            err = exec_res.get("error", "Unknown error")
+            exec_line = f"\n⚠️ <b>Testnet Error:</b> {err}\n"
+        elif st == "SKIPPED_EXISTING_POSITION":
+            exec_line = f"\n⚠️ <b>Testnet:</b> Posisi {sig['side']} sudah aktif sebelumnya\n"
+        elif st == "ABORTED":
+            exec_line = f"\n⚠️ <b>Testnet Aborted:</b> {exec_res.get('message', 'Not executed')}\n"
+        else:
+            exec_line = f"\n🤖 <b>Testnet Status:</b> {st}\n"
 
     return (
         f"{emoji} <b>{sig['symbol']} {sig['side']} SIGNAL (Multi-Coin 4H)</b>\n\n"
@@ -215,6 +225,7 @@ def scan_multicoin(dry_run: bool = False, execute: bool = False, notify: bool = 
                 print(f"  -> Execution result: {exec_res.get('status')}")
             except Exception as e:
                 print(f"  -> Execution failed: {e}")
+                exec_res = {"status": "FAILED", "error": str(e)}
 
         if notify:
             msg = format_multicoin_alert(sig, exec_res=exec_res)

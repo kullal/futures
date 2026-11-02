@@ -55,15 +55,28 @@ class BinanceTestnet:
     def __init__(self, api_key: str = "", api_secret: str = ""):
         self.api_key = api_key
         self.api_secret = api_secret
+        self.time_offset = 0
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "futur-testnet-executor/1.0",
         })
         if self.api_key:
             self.session.headers["X-MBX-APIKEY"] = self.api_key
+        self._sync_time()
+
+    def _sync_time(self):
+        """Calculate time drift between client and Binance server to prevent -1021 errors."""
+        try:
+            resp = self.session.get(f"{BASE_URL}/fapi/v1/time", timeout=5).json()
+            server_time = int(resp.get("serverTime", 0))
+            if server_time > 0:
+                self.time_offset = server_time - int(time.time() * 1000)
+        except Exception:
+            self.time_offset = 0
 
     def _sign(self, params: dict) -> dict:
-        params["timestamp"] = int(time.time() * 1000)
+        params["timestamp"] = int(time.time() * 1000) + self.time_offset
+        params["recvWindow"] = 10000
         query = urllib.parse.urlencode(params)
         signature = hmac.new(
             self.api_secret.encode("utf-8"),
@@ -259,7 +272,7 @@ class BinanceTestnet:
             signed=True,
         )
 
-    def place_stop_loss(self, symbol: str, side: str, stop_price: float, quantity: float) -> dict:
+    def place_stop_loss(self, symbol: str, side: str, stop_price: float | str, quantity: float) -> dict:
         """Place STOP_MARKET order via Binance Algo Service."""
         return self._request(
             "POST",
@@ -269,7 +282,7 @@ class BinanceTestnet:
                 "side": side.upper(),
                 "type": "STOP_MARKET",
                 "algoType": "CONDITIONAL",
-                "triggerPrice": str(round(stop_price, 2)),
+                "triggerPrice": str(stop_price),
                 "quantity": str(quantity),
                 "reduceOnly": "true",
                 "positionSide": "BOTH",
@@ -278,7 +291,7 @@ class BinanceTestnet:
             signed=True,
         )
 
-    def place_take_profit(self, symbol: str, side: str, tp_price: float, quantity: float) -> dict:
+    def place_take_profit(self, symbol: str, side: str, tp_price: float | str, quantity: float) -> dict:
         """Place TAKE_PROFIT_MARKET order via Binance Algo Service."""
         return self._request(
             "POST",
@@ -288,7 +301,7 @@ class BinanceTestnet:
                 "side": side.upper(),
                 "type": "TAKE_PROFIT_MARKET",
                 "algoType": "CONDITIONAL",
-                "triggerPrice": str(round(tp_price, 2)),
+                "triggerPrice": str(tp_price),
                 "quantity": str(quantity),
                 "reduceOnly": "true",
                 "positionSide": "BOTH",
