@@ -34,29 +34,37 @@ def get_config() -> dict | None:
 
 
 def send_message(text: str, parse_mode: str = "HTML") -> dict | None:
-    """Kirim pesan Telegram dan kembalikan respon API (dict) atau None jika gagal."""
+    """Kirim pesan Telegram ke satu atau beberapa chat_id (dipisah koma)."""
     cfg = get_config()
     if not cfg:
         return None
 
-    url = f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage"
-    payload = {
-        "chat_id": cfg["chat_id"],
-        "text": text,
-        "parse_mode": parse_mode,
-        "disable_web_page_preview": True,
-    }
+    raw_chat = cfg["chat_id"]
+    if isinstance(raw_chat, (list, tuple)):
+        chat_ids = [str(c).strip() for c in raw_chat if str(c).strip()]
+    else:
+        chat_ids = [c.strip() for c in str(raw_chat).split(",") if c.strip()]
 
-    try:
-        resp = requests.post(url, json=payload, timeout=15)
-        data = resp.json()
-        if resp.status_code == 200 and data.get("ok"):
-            return data
-        sys.stderr.write(f"Error Telegram API [{resp.status_code}]: {resp.text}\n")
-        return None
-    except Exception as e:
-        sys.stderr.write(f"Error send_telegram: {e}\n")
-        return None
+    last_success = None
+    for cid in chat_ids:
+        url = f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage"
+        payload = {
+            "chat_id": cid,
+            "text": text,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": True,
+        }
+        try:
+            resp = requests.post(url, json=payload, timeout=15)
+            data = resp.json()
+            if resp.status_code == 200 and data.get("ok"):
+                last_success = data
+            else:
+                sys.stderr.write(f"Error Telegram API to {cid} [{resp.status_code}]: {resp.text}\n")
+        except Exception as e:
+            sys.stderr.write(f"Error send_telegram to {cid}: {e}\n")
+
+    return last_success
 
 
 def send_telegram(text: str, parse_mode: str = "HTML") -> bool:
