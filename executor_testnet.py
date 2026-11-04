@@ -33,6 +33,7 @@ def load_config() -> dict:
     cfg = {
         "api_key": os.getenv("BINANCE_TESTNET_API_KEY", ""),
         "api_secret": os.getenv("BINANCE_TESTNET_API_SECRET", ""),
+        "proxy": os.getenv("BINANCE_PROXY", ""),
         "symbol": "BTCUSDT",
         "leverage": 3,
         "risk_pct": 0.02,
@@ -48,18 +49,26 @@ def load_config() -> dict:
         cfg["api_key"] = os.getenv("BINANCE_TESTNET_API_KEY")
     if os.getenv("BINANCE_TESTNET_API_SECRET"):
         cfg["api_secret"] = os.getenv("BINANCE_TESTNET_API_SECRET")
+    if os.getenv("BINANCE_PROXY"):
+        cfg["proxy"] = os.getenv("BINANCE_PROXY")
     return cfg
 
 
 class BinanceTestnet:
-    def __init__(self, api_key: str = "", api_secret: str = ""):
+    def __init__(self, api_key: str = "", api_secret: str = "", proxy: str = ""):
         self.api_key = api_key
         self.api_secret = api_secret
+        self.proxy = proxy or os.getenv("BINANCE_PROXY", "")
         self.time_offset = 0
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "futur-testnet-executor/1.0",
         })
+        if self.proxy:
+            self.session.proxies = {
+                "http": self.proxy,
+                "https": self.proxy,
+            }
         if self.api_key:
             self.session.headers["X-MBX-APIKEY"] = self.api_key
         self._sync_time()
@@ -371,7 +380,7 @@ def execute_signal(sig: dict, dry_run: bool = False) -> dict:
     sl = float(sig["sl"])
     tp = float(sig["tp"])
 
-    client = BinanceTestnet(cfg.get("api_key", ""), cfg.get("api_secret", ""))
+    client = BinanceTestnet(cfg.get("api_key", ""), cfg.get("api_secret", ""), proxy=cfg.get("proxy", ""))
     rules = client.get_symbol_rules(symbol)
     step_size = rules["stepSize"]
     q_prec = rules["quantityPrecision"]

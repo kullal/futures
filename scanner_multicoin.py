@@ -196,7 +196,7 @@ def scan_multicoin(dry_run: bool = False, execute: bool = False, notify: bool = 
 
     # Check active positions to manage slots
     cfg = load_config()
-    client = BinanceTestnet(cfg.get("api_key", ""), cfg.get("api_secret", ""))
+    client = BinanceTestnet(cfg.get("api_key", ""), cfg.get("api_secret", ""), proxy=cfg.get("proxy", ""))
     active_positions = []
     try:
         active_positions = client.get_all_open_positions()
